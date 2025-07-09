@@ -588,7 +588,7 @@ class PathDrawer {
             // Only show modal if not in demo mode
             if (!this.isDemoMode) {
                 setTimeout(() => {
-                    $('#modal-record-text').text(`${finalTime.toFixed(2)} seconds!`);
+                    $('#modal-record-text').text(`기록: ${finalTime.toFixed(2)}초`);
                     $('#nickname-modal').modal('show');
                     finishSimulation();
                 }, 100);
