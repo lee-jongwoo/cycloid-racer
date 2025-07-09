@@ -51,6 +51,11 @@ document.getElementById('redo-button').onclick = function () {
     clearPath();
 };
 
+// 이론적 최적 경로 보여주기 버튼
+document.getElementById('best-button').onclick = function () {
+    //
+};
+
 function saveHandler() {
     const nickname = document.getElementById('nickname-input').value.trim();
     if (nickname) {
