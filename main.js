@@ -53,8 +53,89 @@ document.getElementById('redo-button').onclick = function () {
 
 // 이론적 최적 경로 보여주기 버튼
 document.getElementById('best-button').onclick = function () {
-    //
+    showBestPath();
 };
+
+// Show theoretical best path (cycloid)
+function showBestPath() {
+    // Clear current path and reset
+    clearPath();
+    
+    // Generate cycloid path
+    const cycloidPoints = generateCycloidPath();
+    
+    // Create physics path from cycloid points
+    window.pathDrawer.createPhysicsPath(cycloidPoints);
+    
+    // Set flag to prevent modal from showing
+    window.pathDrawer.isDemoMode = true;
+    
+    // Drop ball
+    window.pathDrawer.dropBall();
+}
+
+// Generate cycloid path points
+function generateCycloidPath() {
+    const startPoint = window.pathDrawer.startPoint;
+    const endPoint = window.pathDrawer.endPoint;
+    
+    const dx = endPoint.x - startPoint.x;
+    const dy = endPoint.y - startPoint.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Calculate proper cycloid parameters for brachistochrone curve
+    const points = [];
+    const numPoints = 100;
+    
+    // For brachistochrone, we need to solve for the proper cycloid
+    // that passes through both start and end points
+    const angle = Math.atan2(dy, dx);
+    
+    // Calculate the parameter range for the cycloid
+    // The cycloid equation: x = r(t - sin(t)), y = r(1 - cos(t))
+    // We need to find the proper scaling to fit our endpoints
+    
+    const targetRatio = Math.abs(dy / dx);
+    let tMax = Math.PI;
+    
+    // Adjust tMax to get the right slope
+    if (dy > 0) { // Going downward
+        // For a downward slope, we might need more than π
+        tMax = Math.PI + Math.atan(targetRatio);
+    }
+    
+    // Calculate radius based on horizontal distance
+    const radius = Math.abs(dx) / (tMax - Math.sin(tMax));
+    
+    for (let i = 0; i <= numPoints; i++) {
+        const t = (i / numPoints) * tMax;
+        
+        // Standard cycloid equations
+        let x = radius * (t - Math.sin(t));
+        let y = radius * (1 - Math.cos(t));
+        
+        // Apply rotation to match the line from start to end
+        const rotatedX = x * Math.cos(angle) - y * Math.sin(angle);
+        const rotatedY = x * Math.sin(angle) + y * Math.cos(angle);
+        
+        // Translate to start point
+        points.push({
+            x: startPoint.x + rotatedX,
+            y: startPoint.y + rotatedY
+        });
+    }
+    
+    // Ensure the last point matches the end point exactly
+    const lastPoint = points[points.length - 1];
+    const scaleX = dx / (lastPoint.x - startPoint.x);
+    const scaleY = dy / (lastPoint.y - startPoint.y);
+    
+    // Apply final scaling to ensure exact endpoint match
+    return points.map(point => ({
+        x: startPoint.x + (point.x - startPoint.x) * scaleX,
+        y: startPoint.y + (point.y - startPoint.y) * scaleY
+    }));
+}
 
 function saveHandler() {
     const nickname = document.getElementById('nickname-input').value.trim();
@@ -283,6 +364,7 @@ class PathDrawer {
         this.currentPath = null;
         this.ball = null;
         this.ballDropped = false;
+        this.isDemoMode = false; // Flag for demo mode
 
         this.createPreviewCanvas();
         this.setupEventListeners();
@@ -503,12 +585,17 @@ class PathDrawer {
             this.ballDropped = false;
             const finalTime = stopTimer();
             
-            // Show completion message and finish simulation
-            setTimeout(() => {
-                $('#modal-record-text').text(`${finalTime.toFixed(2)} seconds!`);
-                $('#nickname-modal').modal('show');
-                finishSimulation();
-            }, 100);
+            // Only show modal if not in demo mode
+            if (!this.isDemoMode) {
+                setTimeout(() => {
+                    $('#modal-record-text').text(`${finalTime.toFixed(2)} seconds!`);
+                    $('#nickname-modal').modal('show');
+                    finishSimulation();
+                }, 100);
+            } else {
+                // Reset demo mode
+                this.isDemoMode = false;
+            }
         }
     }
 
@@ -710,6 +797,7 @@ class PathDrawer {
         }
         
         this.ballDropped = false;
+        this.isDemoMode = false; // Reset demo mode
         resetTimer();
         
         this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
