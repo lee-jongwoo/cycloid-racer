@@ -51,6 +51,14 @@ document.getElementById('redo-button').onclick = function () {
     clearPath();
 };
 
+document.getElementById('clear-button').onclick = function() {
+  // Reset localstorage
+  if (confirm('정말로 모든 기록을 지우시겠습니까?')) {
+    localStorage.removeItem('leaderboard');
+    updateLeaderboard(); // Update leaderboard display
+  }
+}
+
 // 이론적 최적 경로 보여주기 버튼
 document.getElementById('best-button').onclick = function () {
     showBestPath();
