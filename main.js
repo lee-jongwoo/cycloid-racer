@@ -390,6 +390,7 @@ class PathDrawer {
         this.previewCanvas.style.left = '0';
         this.previewCanvas.style.pointerEvents = 'none';
         this.previewCanvas.style.zIndex = '10';
+        this.previewCanvas.classList.add('preview-canvas');
         
         this.canvas.parentNode.appendChild(this.previewCanvas);
         this.previewCtx = this.previewCanvas.getContext('2d');
