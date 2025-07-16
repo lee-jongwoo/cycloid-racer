@@ -598,6 +598,7 @@ class PathDrawer {
             if (!this.isDemoMode) {
                 setTimeout(() => {
                     $('#modal-record-text').text(`기록: ${finalTime.toFixed(2)}초`);
+                    $('#nickname-input').val(''); // Clear input field
                     $('#nickname-modal').modal('show');
                     finishSimulation();
                 }, 100);
