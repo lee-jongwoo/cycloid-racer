@@ -20,6 +20,11 @@ function initializeCanvas() {
     canvas.style.height = containerRect.height + 'px';
 }
 
+$('#nickname-modal').on('shown.bs.modal', function () {
+    // Focus on nickname input when modal is shown
+    $('#nickname-input').focus();
+});
+
 // Initialize canvas size first
 initializeCanvas();
 
@@ -600,7 +605,6 @@ class PathDrawer {
                     $('#modal-record-text').text(`기록: ${finalTime.toFixed(2)}초`);
                     $('#nickname-input').val(''); // Clear input field
                     $('#nickname-modal').modal('show');
-                    $('#nickname-input').focus()
                     finishSimulation();
                 }, 100);
             } else {
