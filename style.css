@@ -54,3 +54,14 @@ body {
     flex-grow: 1;
     position: relative;
 }
+
+/* hide all scrollbars */
+body::-webkit-scrollbar,
+#leaderboard::-webkit-scrollbar {
+    display: none;
+}
+
+#leaderboard::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+}
