@@ -1,0 +1,23 @@
+{
+  "name": "cycloid-racer",
+  "version": "1.0.0",
+  "description": "> 학교 축제를 위해 만든 그저 그런 그림 그리기 챌린지.",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lee-jongwoo/cycloid-racer.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lee-jongwoo/cycloid-racer/issues"
+  },
+  "homepage": "https://github.com/lee-jongwoo/cycloid-racer#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}
