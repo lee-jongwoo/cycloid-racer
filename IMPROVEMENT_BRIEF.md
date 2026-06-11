@@ -48,7 +48,7 @@ Use this section to mark which observed issues should be addressed.
 
 Describe how the game should behave during normal play.
 
-- Start state: a blank canvas with a start button and an empty leaderboard
+- Start state: a blank canvas with control buttons and an empty leaderboard
 - Drawing behavior: users can draw a path with their finger, which is drawn in real-time on the canvas.
 - Ball drop behavior: ball drops from a fixed point above the start of the path.
 - Finish condition: when the ball reaches a certain area near the end of the path, the run is completed and the timer stops.
@@ -73,7 +73,7 @@ Define what should be stored, displayed, and cleared.
 
 Describe the expected visual experience.
 
-- Required visible regions: drawing canvas, timer, start/reset buttons, leaderboard
+- Required visible regions: drawing canvas, timer, reset/demo buttons, leaderboard
 - Minimum supported viewport: should be playable on iPads, but optimized for the large whiteboard
 - Desktop / large display layout: canvas takes up most of the space, with the timer and buttons at the top, and the leaderboard on the right side.
 - Touch device layout: this is the primary target.
