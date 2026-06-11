@@ -1,352 +1,129 @@
-// 필요한 모듈을 Import (Matter 사용을 위한 기본 설정)
-const { Engine, Render, Runner, World, Bodies, Events } = Matter;
+const { Engine, Render, Runner, World, Bodies, Body, Events } = Matter;
 
-// 기본 설정
+const CONFIG = {
+    colors: {
+        background: '#2c3e50',
+        path: '#1abc9c',
+        preview: '#8fa3ad',
+        start: '#2ecc71',
+        finish: '#e74c3c',
+        invalid: '#f1c40f'
+    },
+    ball: {
+        radius: 15,
+        offsetX: 20,
+        offsetY: -52,
+        restitution: 0.18,
+        friction: 0.02,
+        frictionAir: 0.003
+    },
+    path: {
+        inputMinDistance: 4,
+        simplifyDistance: 8,
+        resampleSpacing: 18,
+        segmentThickness: 12,
+        segmentOverlap: 4,
+        smoothingPasses: 2,
+        finishMargin: 90,
+        minVerticalRange: 90,
+        minProgressRatio: 0.7,
+        minLengthRatio: 0.75
+    },
+    layout: {
+        startX: 50,
+        startY: 100,
+        endInsetX: 80,
+        endInsetY: 80
+    }
+};
+
 const engine = Engine.create();
 const { world } = engine;
-engine.world.gravity.y = 1; // 중력 설정
+engine.world.gravity.y = 1;
 
 const canvas = document.getElementById('game-canvas');
-
-// Initialize canvas size before creating render
-function initializeCanvas() {
-    const container = document.getElementById('canvas-container');
-    const containerRect = container.getBoundingClientRect();
-    
-    // Set canvas size to match container
-    canvas.width = containerRect.width;
-    canvas.height = containerRect.height;
-    canvas.style.width = containerRect.width + 'px';
-    canvas.style.height = containerRect.height + 'px';
-}
-
-$('#nickname-modal').on('shown.bs.modal', function () {
-    // Focus on nickname input when modal is shown
-    $('#nickname-input').focus();
+const timerElement = document.getElementById('timer');
+const nicknameModalElement = document.getElementById('nickname-modal');
+let render = null;
+const nicknameModal = bootstrap.Modal.getOrCreateInstance(nicknameModalElement, {
+    backdrop: 'static',
+    keyboard: false
 });
 
-// Initialize canvas size first
-initializeCanvas();
+let pathDrawer = null;
+let startTime = null;
+let timerInterval = null;
+let currentTime = 0;
+let pendingRecordTime = 0;
+let lastCompletedPath = [];
 
-const render = Render.create({
-    canvas: canvas,
-    engine: engine,
+function getCanvasSize() {
+    const container = document.getElementById('canvas-container');
+    const rect = container.getBoundingClientRect();
+    return {
+        width: Math.max(1, Math.floor(rect.width)),
+        height: Math.max(1, Math.floor(rect.height))
+    };
+}
+
+function resizeCanvasToContainer() {
+    const size = getCanvasSize();
+    canvas.width = size.width;
+    canvas.height = size.height;
+    canvas.style.width = `${size.width}px`;
+    canvas.style.height = `${size.height}px`;
+
+    if (render) {
+        render.options.width = size.width;
+        render.options.height = size.height;
+        render.canvas.width = size.width;
+        render.canvas.height = size.height;
+    }
+}
+
+function createPointsForCanvas() {
+    return {
+        startPoint: { x: CONFIG.layout.startX, y: CONFIG.layout.startY },
+        endPoint: {
+            x: Math.max(CONFIG.layout.startX + 160, canvas.width - CONFIG.layout.endInsetX),
+            y: Math.max(CONFIG.layout.startY + 160, canvas.height - CONFIG.layout.endInsetY)
+        }
+    };
+}
+
+resizeCanvasToContainer();
+
+render = Render.create({
+    canvas,
+    engine,
     options: {
         wireframes: false,
-        background: '#2c3e50',
+        background: CONFIG.colors.background,
         width: canvas.width,
         height: canvas.height
     }
 });
 
-
-
-// Add a clear button functionality
-function clearPath() {
-    pathDrawer.clearPath();
+function formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const displaySeconds = (seconds % 60).toFixed(2);
+    return `${minutes.toString().padStart(2, '0')}:${displaySeconds.padStart(5, '0')}`;
 }
 
-// 시뮬레이션 종료 후 처리
-function finishSimulation() {
-    // 닉네임을 입력받는 모달을 표시
-}
-
-// 지우기 버튼
-document.getElementById('redo-button').onclick = function () {
-    clearPath();
-};
-
-document.getElementById('clear-button').onclick = function() {
-  // Reset localstorage
-  if (confirm('정말로 모든 기록을 지우시겠습니까?')) {
-    localStorage.removeItem('leaderboard');
-    updateLeaderboard(); // Update leaderboard display
-  }
-}
-
-// 이론적 최적 경로 보여주기 버튼
-document.getElementById('best-button').onclick = function () {
-    showBestPath();
-};
-
-// Show theoretical best path (cycloid)
-function showBestPath() {
-    // Clear current path and reset
-    clearPath();
-    
-    // Generate cycloid path
-    const cycloidPoints = generateCycloidPath();
-    
-    // Create physics path from cycloid points
-    window.pathDrawer.createPhysicsPath(cycloidPoints);
-    
-    // Set flag to prevent modal from showing
-    window.pathDrawer.isDemoMode = true;
-    
-    // Drop ball
-    window.pathDrawer.dropBall();
-}
-
-// Generate cycloid path points
-function generateCycloidPath() {
-    const startPoint = window.pathDrawer.startPoint;
-    const endPoint = window.pathDrawer.endPoint;
-    
-    const dx = endPoint.x - startPoint.x;
-    const dy = endPoint.y - startPoint.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    // Calculate proper cycloid parameters for brachistochrone curve
-    const points = [];
-    const numPoints = 100;
-    
-    // For brachistochrone, we need to solve for the proper cycloid
-    // that passes through both start and end points
-    const angle = Math.atan2(dy, dx);
-    
-    // Calculate the parameter range for the cycloid
-    // The cycloid equation: x = r(t - sin(t)), y = r(1 - cos(t))
-    // We need to find the proper scaling to fit our endpoints
-    
-    const targetRatio = Math.abs(dy / dx);
-    let tMax = Math.PI;
-    
-    // Adjust tMax to get the right slope
-    if (dy > 0) { // Going downward
-        // For a downward slope, we might need more than π
-        tMax = Math.PI + Math.atan(targetRatio);
-    }
-    
-    // Calculate radius based on horizontal distance
-    const radius = Math.abs(dx) / (tMax - Math.sin(tMax));
-    
-    for (let i = 0; i <= numPoints; i++) {
-        const t = (i / numPoints) * tMax;
-        
-        // Standard cycloid equations
-        let x = radius * (t - Math.sin(t));
-        let y = radius * (1 - Math.cos(t));
-        
-        // Apply rotation to match the line from start to end
-        const rotatedX = x * Math.cos(angle) - y * Math.sin(angle);
-        const rotatedY = x * Math.sin(angle) + y * Math.cos(angle);
-        
-        // Translate to start point
-        points.push({
-            x: startPoint.x + rotatedX,
-            y: startPoint.y + rotatedY
-        });
-    }
-    
-    // Ensure the last point matches the end point exactly
-    const lastPoint = points[points.length - 1];
-    const scaleX = dx / (lastPoint.x - startPoint.x);
-    const scaleY = dy / (lastPoint.y - startPoint.y);
-    
-    // Apply final scaling to ensure exact endpoint match
-    return points.map(point => ({
-        x: startPoint.x + (point.x - startPoint.x) * scaleX,
-        y: startPoint.y + (point.y - startPoint.y) * scaleY
-    }));
-}
-
-function saveHandler() {
-    const nickname = document.getElementById('nickname-input').value.trim();
-    if (nickname) {
-        saveResult(nickname);
-        $('#nickname-input').val(''); // Clear input field
-        $('#nickname-modal').modal('hide'); // Hide the modal using Bootstrap
-    }
-}
-
-// Prevent form from submitting
-$('#nickname-form').on('submit', function (e) {
-    e.preventDefault(); // Prevent default form submission
-    saveHandler();
-});
-
-// 저장 버튼 클릭 이벤트 처리
-document.getElementById('saveButton').onclick = saveHandler;
-
-// 결과 데이터 저장
-function saveResult(nickname) {
-    const timestamp = new Date().toISOString();
-    
-    // Capture path snapshot
-    const pathSnapshot = capturePathSnapshot();
-    
-    const record = {
-        nickname: nickname,
-        time: currentTime, // Use the actual final time
-        pathImage: pathSnapshot,
-        timestamp: timestamp
-    };
-    
-    const leaderboard = JSON.parse(localStorage.getItem('leaderboard')) || [];
-    leaderboard.push(record);
-    localStorage.setItem('leaderboard', JSON.stringify(leaderboard));
-
-    // Reset game
-    clearPath();
-    resetTimer();
-
-    // 리더보드 업데이트
-    updateLeaderboard();
-}
-
-// Capture path snapshot as base64 image
-function capturePathSnapshot() {
-    try {
-        // Create a temporary canvas for the snapshot
-        const snapshotCanvas = document.createElement('canvas');
-        snapshotCanvas.width = 200; // Thumbnail width
-        snapshotCanvas.height = 150; // Thumbnail height
-        const snapshotCtx = snapshotCanvas.getContext('2d');
-        
-        // Set background
-        snapshotCtx.fillStyle = '#2c3e50';
-        snapshotCtx.fillRect(0, 0, snapshotCanvas.width, snapshotCanvas.height);
-        
-        if (window.pathDrawer && window.pathDrawer.rawPoints && window.pathDrawer.rawPoints.length > 1) {
-            // Scale the path to fit the thumbnail
-            const scaleX = snapshotCanvas.width / canvas.width;
-            const scaleY = snapshotCanvas.height / canvas.height;
-            const scale = Math.min(scaleX, scaleY);
-            
-            snapshotCtx.save();
-            snapshotCtx.scale(scale, scale);
-            
-            // Draw the actual raw path points with better visibility
-            const points = window.pathDrawer.rawPoints;
-            snapshotCtx.strokeStyle = '#1abc9c';
-            snapshotCtx.lineWidth = 6 / scale; // Thicker line for better visibility
-            snapshotCtx.lineCap = 'round';
-            snapshotCtx.lineJoin = 'round';
-            
-            // Add shadow for better contrast
-            snapshotCtx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-            snapshotCtx.shadowBlur = 2 / scale;
-            snapshotCtx.shadowOffsetX = 1 / scale;
-            snapshotCtx.shadowOffsetY = 1 / scale;
-            
-            snapshotCtx.beginPath();
-            snapshotCtx.moveTo(points[0].x, points[0].y);
-            
-            for (let i = 1; i < points.length; i++) {
-                snapshotCtx.lineTo(points[i].x, points[i].y);
-            }
-            snapshotCtx.stroke();
-            
-            snapshotCtx.restore();
-        }
-        
-        return snapshotCanvas.toDataURL('image/png');
-    } catch (error) {
-        console.error('Error capturing path snapshot:', error);
-        return null;
-    }
-}
-
-function timeSince(date) {
-
-  var seconds = Math.floor((new Date() - date) / 1000);
-
-  var interval = seconds / 31536000;
-
-  if (interval > 1) {
-    return Math.floor(interval) + "년 전";
-  }
-  interval = seconds / 2592000;
-  if (interval > 1) {
-    return Math.floor(interval) + "개월 전";
-  }
-  interval = seconds / 86400;
-  if (interval > 1) {
-    return Math.floor(interval) + "일 전";
-  }
-  interval = seconds / 3600;
-  if (interval > 1) {
-    return Math.floor(interval) + "시간 전";
-  }
-  interval = seconds / 60;
-  if (interval > 1) {
-    return Math.floor(interval) + "분 전";
-  }
-  return Math.floor(seconds) + "초 전";
-}
-
-// 리더보드 업데이트
-function updateLeaderboard() {
-    const leaderboard = JSON.parse(localStorage.getItem('leaderboard')) || [];
-    leaderboard.sort((a, b) => a.time - b.time); // 시간 오름차순 정렬
-    
-    // 리더보드에 표시
-    const leaderboardElement = document.getElementById('leaderboard-list');
-    leaderboardElement.innerHTML = ''; // 기존 리더보드 초기화
-    
-    leaderboard.forEach((record, index) => {
-        const entry = document.createElement('div');
-        entry.className = 'leaderboard-entry';
-        entry.style.cssText = `
-            padding: 10px;
-            margin: 5px 0;
-            background-color: #34495e;
-            border-radius: 5px;
-            border-left: 3px solid ${index < 3 ? ['#FFD700', '#C0C0C0', '#CD7F32'][index] : '#1abc9c'};
-        `;
-        
-        const timeFormatted = record.time ? record.time.toFixed(2) : 'N/A';
-        const dateFormatted = timeSince(new Date(record.timestamp));
-        
-        entry.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <div style="flex-shrink: 0;">
-                    <div style="font-weight: bold; color: #ecf0f1;">#${index + 1}</div>
-                    <div style="font-size: 0.9em; color: #bdc3c7;">${timeFormatted}s</div>
-                </div>
-                ${record.pathImage ? `
-                    <img src="${record.pathImage}" 
-                         style="width: 60px; height: 45px; border-radius: 3px; border: 1px solid #555;" 
-                         alt="Path preview">
-                ` : '<div style="width: 60px; height: 45px; background: #555; border-radius: 3px;"></div>'}
-                <div style="flex-grow: 1;">
-                    <div style="font-weight: bold; color: #ecf0f1;">${record.nickname}</div>
-                    <div style="font-size: 0.8em; color: #95a5a6;">${dateFormatted}</div>
-                </div>
-            </div>
-        `;
-        
-        leaderboardElement.appendChild(entry);
-    });
-}
-
-
-// Timer variables
-let startTime = null;
-let timerInterval = null;
-let currentTime = 0;
-
-// Update timer display
 function updateTimer() {
-    if (startTime) {
-        currentTime = (Date.now() - startTime) / 1000;
-        const minutes = Math.floor(currentTime / 60);
-        const seconds = (currentTime % 60).toFixed(2);
-        document.getElementById('timer').textContent = 
-            `${minutes.toString().padStart(2, '0')}:${seconds.padStart(5, '0')}`;
-    }
+    if (!startTime) return;
+    currentTime = (Date.now() - startTime) / 1000;
+    timerElement.textContent = formatTime(currentTime);
 }
 
-// Start timer
 function startTimer() {
-    if (!startTime) {
-        startTime = Date.now();
-        timerInterval = setInterval(updateTimer, 10); // Update every 10ms for smooth display
-    }
+    if (startTime) return;
+    startTime = Date.now();
+    timerInterval = setInterval(updateTimer, 10);
 }
 
-// Stop timer
 function stopTimer() {
+    updateTimer();
     if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
@@ -354,51 +131,366 @@ function stopTimer() {
     return currentTime;
 }
 
-// Reset timer
 function resetTimer() {
-    stopTimer();
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
     startTime = null;
     currentTime = 0;
-    document.getElementById('timer').textContent = '00:00.00';
+    timerElement.textContent = '00:00.00';
 }
 
+function isFinitePoint(point) {
+    return point && Number.isFinite(point.x) && Number.isFinite(point.y);
+}
 
-////////
+function distance(a, b) {
+    return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function pathLength(points) {
+    let total = 0;
+    for (let i = 1; i < points.length; i++) {
+        total += distance(points[i - 1], points[i]);
+    }
+    return total;
+}
+
+function pathBounds(points) {
+    return points.reduce((bounds, point) => ({
+        minX: Math.min(bounds.minX, point.x),
+        maxX: Math.max(bounds.maxX, point.x),
+        minY: Math.min(bounds.minY, point.y),
+        maxY: Math.max(bounds.maxY, point.y)
+    }), {
+        minX: Infinity,
+        maxX: -Infinity,
+        minY: Infinity,
+        maxY: -Infinity
+    });
+}
+
+function simplifyPoints(points, minDistance) {
+    const simplified = [];
+    for (const point of points) {
+        if (!isFinitePoint(point)) continue;
+        if (!simplified.length || distance(simplified[simplified.length - 1], point) >= minDistance) {
+            simplified.push({ x: point.x, y: point.y });
+        }
+    }
+    return simplified;
+}
+
+function translatePathToStart(points, startPoint) {
+    if (!points.length) return [];
+    const dx = startPoint.x - points[0].x;
+    const dy = startPoint.y - points[0].y;
+    return points.map(point => ({ x: point.x + dx, y: point.y + dy }));
+}
+
+function chaikinSmooth(points, passes) {
+    let current = points.map(point => ({ ...point }));
+    for (let pass = 0; pass < passes; pass++) {
+        if (current.length < 3) return current;
+        const next = [current[0]];
+        for (let i = 0; i < current.length - 1; i++) {
+            const a = current[i];
+            const b = current[i + 1];
+            next.push({
+                x: a.x * 0.75 + b.x * 0.25,
+                y: a.y * 0.75 + b.y * 0.25
+            });
+            next.push({
+                x: a.x * 0.25 + b.x * 0.75,
+                y: a.y * 0.25 + b.y * 0.75
+            });
+        }
+        next.push(current[current.length - 1]);
+        current = next;
+    }
+    return current;
+}
+
+function resamplePath(points, spacing) {
+    if (points.length < 2) return points;
+
+    const resampled = [{ ...points[0] }];
+    let carried = 0;
+    let previous = points[0];
+
+    for (let i = 1; i < points.length; i++) {
+        let current = points[i];
+        let segmentLength = distance(previous, current);
+        if (segmentLength === 0) continue;
+
+        while (carried + segmentLength >= spacing) {
+            const needed = spacing - carried;
+            const ratio = needed / segmentLength;
+            const point = {
+                x: previous.x + (current.x - previous.x) * ratio,
+                y: previous.y + (current.y - previous.y) * ratio
+            };
+            resampled.push(point);
+            previous = point;
+            segmentLength = distance(previous, current);
+            carried = 0;
+        }
+
+        carried += segmentLength;
+        previous = current;
+    }
+
+    const last = points[points.length - 1];
+    if (distance(resampled[resampled.length - 1], last) > spacing * 0.4) {
+        resampled.push({ ...last });
+    }
+    return resampled;
+}
+
+function isPathInCanvas(points, margin = 120) {
+    return points.every(point =>
+        point.x >= -margin &&
+        point.y >= -margin &&
+        point.x <= canvas.width + margin &&
+        point.y <= canvas.height + margin
+    );
+}
+
+function validatePath(points, startPoint, endPoint) {
+    if (points.length < 4) {
+        return { valid: false, reason: '경로가 너무 짧습니다' };
+    }
+
+    const expectedDistance = distance(startPoint, endPoint);
+    const bounds = pathBounds(points);
+    const totalLength = pathLength(points);
+    const horizontalProgress = bounds.maxX - startPoint.x;
+    const verticalRange = bounds.maxY - bounds.minY;
+    const finishReached = points.some(point =>
+        point.x >= endPoint.x - CONFIG.path.finishMargin &&
+        point.y >= endPoint.y - CONFIG.path.finishMargin
+    );
+
+    if (!points.every(isFinitePoint)) {
+        return { valid: false, reason: '경로를 다시 그려 주세요' };
+    }
+    if (!isPathInCanvas(points)) {
+        return { valid: false, reason: '경로가 화면 밖으로 벗어났습니다' };
+    }
+    if (totalLength < expectedDistance * CONFIG.path.minLengthRatio) {
+        return { valid: false, reason: '경로를 더 길게 그려 주세요' };
+    }
+    if (horizontalProgress < (endPoint.x - startPoint.x) * CONFIG.path.minProgressRatio) {
+        return { valid: false, reason: '도착점까지 더 가까이 그려 주세요' };
+    }
+    if (verticalRange < CONFIG.path.minVerticalRange) {
+        return { valid: false, reason: '너무 평평한 경로입니다' };
+    }
+    if (!finishReached) {
+        return { valid: false, reason: '빨간 도착 영역까지 그려 주세요' };
+    }
+
+    return { valid: true, reason: '' };
+}
+
+function processUserPath(rawPoints, startPoint, endPoint) {
+    const simplified = simplifyPoints(rawPoints, CONFIG.path.simplifyDistance);
+    const translated = translatePathToStart(simplified, startPoint);
+    const initialValidation = validatePath(translated, startPoint, endPoint);
+    if (!initialValidation.valid) return { ...initialValidation, points: translated };
+
+    const smoothed = chaikinSmooth(translated, CONFIG.path.smoothingPasses);
+    const resampled = resamplePath(smoothed, CONFIG.path.resampleSpacing);
+    const finalValidation = validatePath(resampled, startPoint, endPoint);
+    if (!finalValidation.valid) return { ...finalValidation, points: resampled };
+
+    return { valid: true, reason: '', points: resampled };
+}
+
+function timeSince(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    let interval = seconds / 31536000;
+    if (interval > 1) return `${Math.floor(interval)}년 전`;
+    interval = seconds / 2592000;
+    if (interval > 1) return `${Math.floor(interval)}개월 전`;
+    interval = seconds / 86400;
+    if (interval > 1) return `${Math.floor(interval)}일 전`;
+    interval = seconds / 3600;
+    if (interval > 1) return `${Math.floor(interval)}시간 전`;
+    interval = seconds / 60;
+    if (interval > 1) return `${Math.floor(interval)}분 전`;
+    return `${Math.max(0, Math.floor(seconds))}초 전`;
+}
+
+function readLeaderboard() {
+    try {
+        return JSON.parse(localStorage.getItem('leaderboard')) || [];
+    } catch {
+        return [];
+    }
+}
+
+function updateLeaderboard() {
+    const leaderboard = readLeaderboard().sort((a, b) => a.time - b.time);
+    const leaderboardElement = document.getElementById('leaderboard-list');
+    leaderboardElement.innerHTML = '';
+
+    leaderboard.forEach((record, index) => {
+        const entry = document.createElement('div');
+        entry.className = `leaderboard-entry${index < 10 ? ' leaderboard-entry-top' : ''}`;
+        entry.style.borderLeftColor = index < 3 ? ['#FFD700', '#C0C0C0', '#CD7F32'][index] : CONFIG.colors.path;
+
+        const rank = document.createElement('div');
+        rank.className = 'leaderboard-rank';
+        rank.innerHTML = `<strong>#${index + 1}</strong><span>${record.time ? record.time.toFixed(2) : 'N/A'}s</span>`;
+
+        const thumbnail = document.createElement('div');
+        thumbnail.className = 'leaderboard-thumbnail';
+        if (record.pathImage) {
+            const image = document.createElement('img');
+            image.src = record.pathImage;
+            image.alt = 'Path preview';
+            thumbnail.appendChild(image);
+        }
+
+        const details = document.createElement('div');
+        details.className = 'leaderboard-details';
+
+        const nickname = document.createElement('strong');
+        nickname.textContent = record.nickname;
+
+        const date = document.createElement('span');
+        date.textContent = timeSince(new Date(record.timestamp));
+
+        details.append(nickname, date);
+        entry.append(rank, thumbnail, details);
+        leaderboardElement.appendChild(entry);
+    });
+}
+
+function capturePathSnapshot(points = lastCompletedPath) {
+    try {
+        const snapshotCanvas = document.createElement('canvas');
+        snapshotCanvas.width = 200;
+        snapshotCanvas.height = 150;
+        const ctx = snapshotCanvas.getContext('2d');
+
+        ctx.fillStyle = CONFIG.colors.background;
+        ctx.fillRect(0, 0, snapshotCanvas.width, snapshotCanvas.height);
+
+        if (points.length > 1) {
+            const bounds = pathBounds(points);
+            const width = Math.max(1, bounds.maxX - bounds.minX);
+            const height = Math.max(1, bounds.maxY - bounds.minY);
+            const padding = 14;
+            const scale = Math.min(
+                (snapshotCanvas.width - padding * 2) / width,
+                (snapshotCanvas.height - padding * 2) / height
+            );
+            const offsetX = padding - bounds.minX * scale;
+            const offsetY = padding - bounds.minY * scale;
+
+            ctx.strokeStyle = CONFIG.colors.path;
+            ctx.lineWidth = 6;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+            ctx.shadowBlur = 2;
+            ctx.beginPath();
+            ctx.moveTo(points[0].x * scale + offsetX, points[0].y * scale + offsetY);
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x * scale + offsetX, points[i].y * scale + offsetY);
+            }
+            ctx.stroke();
+        }
+
+        return snapshotCanvas.toDataURL('image/png');
+    } catch (error) {
+        console.error('Error capturing path snapshot:', error);
+        return null;
+    }
+}
+
+function saveResult(nickname) {
+    const leaderboard = readLeaderboard();
+    leaderboard.push({
+        nickname,
+        time: pendingRecordTime,
+        pathImage: capturePathSnapshot(),
+        timestamp: new Date().toISOString()
+    });
+    localStorage.setItem('leaderboard', JSON.stringify(leaderboard));
+    pendingRecordTime = 0;
+    nicknameModal.hide();
+    pathDrawer.resetRun();
+    updateLeaderboard();
+}
+
+function saveHandler() {
+    const nickname = document.getElementById('nickname-input').value.trim();
+    if (!nickname) return;
+    saveResult(nickname);
+    document.getElementById('nickname-input').value = '';
+}
+
+function generateCycloidPath(startPoint, endPoint) {
+    const dx = endPoint.x - startPoint.x;
+    const dy = endPoint.y - startPoint.y;
+    const points = [];
+    const steps = 90;
+    const tMax = Math.PI + Math.atan(Math.abs(dy / Math.max(1, dx)));
+    const radius = Math.abs(dx) / Math.max(1, tMax - Math.sin(tMax));
+
+    for (let i = 0; i <= steps; i++) {
+        const t = (i / steps) * tMax;
+        points.push({
+            x: startPoint.x + radius * (t - Math.sin(t)),
+            y: startPoint.y + radius * (1 - Math.cos(t))
+        });
+    }
+
+    const last = points[points.length - 1];
+    const scaleX = dx / Math.max(1, last.x - startPoint.x);
+    const scaleY = dy / Math.max(1, last.y - startPoint.y);
+    return points.map(point => ({
+        x: startPoint.x + (point.x - startPoint.x) * scaleX,
+        y: startPoint.y + (point.y - startPoint.y) * scaleY
+    }));
+}
+
 class PathDrawer {
-    constructor(canvas, world, startPoint, endPoint) {
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-        this.world = world;
-        this.startPoint = startPoint;
-        this.endPoint = endPoint;
-
-        this.isDrawing = false;
+    constructor(canvasElement, physicsWorld) {
+        this.canvas = canvasElement;
+        this.world = physicsWorld;
         this.rawPoints = [];
         this.currentPath = null;
         this.ball = null;
-        this.ballDropped = false;
-        this.isDemoMode = false; // Flag for demo mode
+        this.state = 'idle';
+        this.message = '';
+        this.demoMode = false;
+
+        const points = createPointsForCanvas();
+        this.startPoint = points.startPoint;
+        this.endPoint = points.endPoint;
 
         this.createPreviewCanvas();
         this.setupEventListeners();
-        this.drawStartEndPoints();
         this.setupCollisionDetection();
+        this.drawOverlay();
     }
 
     createPreviewCanvas() {
-        // Create preview canvas with same dimensions as main canvas
         this.previewCanvas = document.createElement('canvas');
-        this.updatePreviewCanvasSize();
-        
         this.previewCanvas.style.position = 'absolute';
         this.previewCanvas.style.top = '0';
         this.previewCanvas.style.left = '0';
         this.previewCanvas.style.pointerEvents = 'none';
         this.previewCanvas.style.zIndex = '10';
         this.previewCanvas.classList.add('preview-canvas');
-        
         this.canvas.parentNode.appendChild(this.previewCanvas);
         this.previewCtx = this.previewCanvas.getContext('2d');
+        this.updatePreviewCanvasSize();
     }
 
     updatePreviewCanvasSize() {
@@ -408,169 +500,277 @@ class PathDrawer {
         this.previewCanvas.style.height = this.canvas.style.height;
     }
 
+    updateGeometry() {
+        const points = createPointsForCanvas();
+        this.startPoint = points.startPoint;
+        this.endPoint = points.endPoint;
+        this.updatePreviewCanvasSize();
+        this.drawOverlay();
+    }
+
     setupEventListeners() {
-        // Mouse events
-        this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
-        this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
-        this.canvas.addEventListener('mouseleave', (e) => this.handleMouseUp(e));
+        this.canvas.addEventListener('mousedown', event => this.startDrawing(this.getEventCoordinates(event)));
+        this.canvas.addEventListener('mousemove', event => this.continueDrawing(this.getEventCoordinates(event)));
+        this.canvas.addEventListener('mouseup', () => this.finishDrawing());
+        this.canvas.addEventListener('mouseleave', () => this.finishDrawing());
 
-        // Touch events
-        this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
-        this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
-        this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
-        this.canvas.addEventListener('touchcancel', (e) => this.handleTouchEnd(e), { passive: false });
+        this.canvas.addEventListener('touchstart', event => {
+            event.preventDefault();
+            if (event.touches.length === 1) this.startDrawing(this.getEventCoordinates(event));
+        }, { passive: false });
+        this.canvas.addEventListener('touchmove', event => {
+            event.preventDefault();
+            if (event.touches.length === 1) this.continueDrawing(this.getEventCoordinates(event));
+        }, { passive: false });
+        this.canvas.addEventListener('touchend', event => {
+            event.preventDefault();
+            this.finishDrawing();
+        }, { passive: false });
+        this.canvas.addEventListener('touchcancel', event => {
+            event.preventDefault();
+            this.finishDrawing();
+        }, { passive: false });
     }
 
-    // Touch event handlers
-    handleTouchStart(e) {
-        e.preventDefault(); // Prevent scrolling
-        if (e.touches.length === 1) {
-            const touch = e.touches[0];
-            const rect = this.canvas.getBoundingClientRect();
-            const x = touch.clientX - rect.left;
-            const y = touch.clientY - rect.top;
-
-            this.isDrawing = true;
-            this.rawPoints = [];
-            this.rawPoints.push({ x, y });
-
-            // Clear previous path if exists
-            if (this.currentPath) {
-                Matter.World.remove(this.world, this.currentPath);
-                this.currentPath = null;
+    setupCollisionDetection() {
+        Events.on(engine, 'afterUpdate', () => {
+            if (this.state !== 'running' && this.state !== 'demo') return;
+            if (!this.ball) return;
+            const position = this.ball.position;
+            if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+                this.resetRun('경로를 다시 그려 주세요');
+                return;
             }
-
-            // Clear preview canvas
-            this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
-            this.drawStartEndPoints();
-        }
+            if (this.isInFinishArea(position)) {
+                this.finishRace();
+            }
+            if (position.y > this.canvas.height + 800 || position.x > this.canvas.width + 800) {
+                this.failRace();
+            }
+        });
     }
 
-    handleTouchMove(e) {
-        e.preventDefault(); // Prevent scrolling
-        if (!this.isDrawing || e.touches.length !== 1) return;
-
-        const touch = e.touches[0];
+    getEventCoordinates(event) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = touch.clientX - rect.left;
-        const y = touch.clientY - rect.top;
+        const source = event.touches?.[0] || event;
+        return {
+            x: source.clientX - rect.left,
+            y: source.clientY - rect.top
+        };
+    }
 
-        // Add point if it's far enough from the last point (reduces noise)
-        const lastPoint = this.rawPoints[this.rawPoints.length - 1];
-        const distance = Math.sqrt((x - lastPoint.x) ** 2 + (y - lastPoint.y) ** 2);
+    startDrawing(point) {
+        if (!isFinitePoint(point)) return;
+        nicknameModal.hide();
+        this.clearPhysics();
+        this.state = 'drawing';
+        this.demoMode = false;
+        this.message = '';
+        this.rawPoints = [point];
+        this.drawOverlay();
+    }
 
-        if (distance > 3) {
-            this.rawPoints.push({ x, y });
-            this.drawPreview();
+    continueDrawing(point) {
+        if (this.state !== 'drawing' || !isFinitePoint(point)) return;
+        const previous = this.rawPoints[this.rawPoints.length - 1];
+        if (distance(previous, point) >= CONFIG.path.inputMinDistance) {
+            this.rawPoints.push(point);
+            this.drawOverlay(this.rawPoints);
         }
     }
 
-    handleTouchEnd(e) {
-        e.preventDefault(); // Prevent scrolling
-        if (!this.isDrawing) return;
-        this.isDrawing = false;
-
-        if (this.rawPoints.length > 2) {
-            this.processAndCreatePath();
+    finishDrawing() {
+        if (this.state !== 'drawing') return;
+        this.state = 'idle';
+        if (this.rawPoints.length < 3) {
+            this.resetRun('경로를 더 길게 그려 주세요');
+            return;
         }
+
+        const result = processUserPath(this.rawPoints, this.startPoint, this.endPoint);
+        if (!result.valid) {
+            this.rawPoints = result.points || this.rawPoints;
+            this.message = result.reason;
+            this.drawOverlay(this.rawPoints, CONFIG.colors.invalid);
+            return;
+        }
+
+        this.startRace(result.points, false);
     }
 
-    // Helper method to get coordinates from either mouse or touch event
-    getEventCoordinates(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        if (e.touches && e.touches.length > 0) {
-            // Touch event
-            return {
-                x: e.touches[0].clientX - rect.left,
-                y: e.touches[0].clientY - rect.top
-            };
+    startRace(points, demoMode) {
+        this.clearPhysics();
+        this.demoMode = demoMode;
+        this.rawPoints = points.map(point => ({ ...point }));
+        lastCompletedPath = [];
+        if (!this.createPhysicsPath(points)) {
+            this.resetRun('경로를 다시 그려 주세요');
+            return;
+        }
+        this.drawOverlay(points, CONFIG.colors.path);
+        this.dropBall();
+        this.state = demoMode ? 'demo' : 'running';
+    }
+
+    showBestPath() {
+        this.resetRun();
+        const points = generateCycloidPath(this.startPoint, this.endPoint);
+        this.startRace(points, true);
+    }
+
+    isInFinishArea(point) {
+        return point.x >= this.endPoint.x && point.y >= this.endPoint.y;
+    }
+
+    finishRace() {
+        if (this.state !== 'running' && this.state !== 'demo') return;
+        const finalTime = stopTimer();
+        lastCompletedPath = this.rawPoints.map(point => ({ ...point }));
+
+        if (this.demoMode) {
+            this.state = 'finished';
+            this.demoMode = false;
+            return;
+        }
+
+        this.state = 'finished';
+        pendingRecordTime = finalTime;
+        document.getElementById('modal-record-text').textContent = `기록: ${finalTime.toFixed(2)}초`;
+        document.getElementById('nickname-input').value = '';
+        setTimeout(() => nicknameModal.show(), 100);
+    }
+
+    failRace() {
+        if (this.state !== 'running' && this.state !== 'demo') return;
+        stopTimer();
+        if (this.demoMode) {
+            this.resetRun();
         } else {
-            // Mouse event
-            return {
-                x: e.clientX - rect.left,
-                y: e.clientY - rect.top
-            };
+            this.resetRun('공이 도착하지 못했습니다');
         }
     }
 
-    handleMouseDown(e) {
-        this.isDrawing = true;
-        this.rawPoints = [];
-        const coords = this.getEventCoordinates(e);
-        this.rawPoints.push(coords);
+    dropBall() {
+        if (this.ball) World.remove(this.world, this.ball);
+        this.ball = Bodies.circle(
+            this.startPoint.x + CONFIG.ball.offsetX,
+            this.startPoint.y + CONFIG.ball.offsetY,
+            CONFIG.ball.radius,
+            {
+                restitution: CONFIG.ball.restitution,
+                friction: CONFIG.ball.friction,
+                frictionAir: CONFIG.ball.frictionAir,
+                render: {
+                    fillStyle: CONFIG.colors.finish,
+                    strokeStyle: '#c0392b',
+                    lineWidth: 2
+                }
+            }
+        );
+        World.add(this.world, this.ball);
+        resetTimer();
+        startTimer();
+    }
 
-        // Clear previous path if exists
+    createPhysicsPath(points) {
+        if (points.length < 2 || !points.every(isFinitePoint)) return false;
+
+        const bodies = [];
+        for (let i = 0; i < points.length - 1; i++) {
+            const a = points[i];
+            const b = points[i + 1];
+            const length = distance(a, b);
+            if (!Number.isFinite(length) || length < 1) continue;
+
+            const angle = Math.atan2(b.y - a.y, b.x - a.x);
+            const segment = Bodies.rectangle(
+                (a.x + b.x) / 2,
+                (a.y + b.y) / 2,
+                length + CONFIG.path.segmentOverlap,
+                CONFIG.path.segmentThickness,
+                {
+                    angle,
+                    isStatic: true,
+                    friction: 0.45,
+                    render: {
+                        fillStyle: CONFIG.colors.path,
+                        strokeStyle: CONFIG.colors.path,
+                        lineWidth: 1
+                    }
+                }
+            );
+            bodies.push(segment);
+        }
+
+        if (!bodies.length) return false;
+        this.currentPath = Body.create({ parts: bodies, isStatic: true });
+        const allPartsFinite = this.currentPath.parts.every(part =>
+            Number.isFinite(part.position.x) &&
+            Number.isFinite(part.position.y) &&
+            Number.isFinite(part.angle)
+        );
+        if (!allPartsFinite) {
+            this.currentPath = null;
+            return false;
+        }
+
+        World.add(this.world, this.currentPath);
+        return true;
+    }
+
+    clearPhysics() {
         if (this.currentPath) {
-            Matter.World.remove(this.world, this.currentPath);
+            World.remove(this.world, this.currentPath);
             this.currentPath = null;
         }
+        if (this.ball) {
+            World.remove(this.world, this.ball);
+            this.ball = null;
+        }
+    }
 
-        // Clear preview canvas
+    resetRun(message = '') {
+        this.clearPhysics();
+        this.state = 'idle';
+        this.demoMode = false;
+        this.rawPoints = [];
+        this.message = message;
+        pendingRecordTime = 0;
+        resetTimer();
+        this.drawOverlay();
+    }
+
+    drawOverlay(points = [], strokeStyle = CONFIG.colors.preview) {
         this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
-        this.drawStartEndPoints();
+        if (points.length > 1) this.drawPath(points, strokeStyle);
+        this.drawMarkers();
+        if (this.message) this.drawMessage(this.message);
     }
 
-    handleMouseMove(e) {
-        if (!this.isDrawing) return;
-
-        const coords = this.getEventCoordinates(e);
-
-        // Add point if it's far enough from the last point (reduces noise)
-        const lastPoint = this.rawPoints[this.rawPoints.length - 1];
-        const distance = Math.sqrt((coords.x - lastPoint.x) ** 2 + (coords.y - lastPoint.y) ** 2);
-
-        if (distance > 3) {
-            this.rawPoints.push(coords);
-            this.drawPreview();
+    drawPath(points, strokeStyle) {
+        this.previewCtx.strokeStyle = strokeStyle;
+        this.previewCtx.lineWidth = strokeStyle === CONFIG.colors.preview ? 4 : 6;
+        this.previewCtx.lineCap = 'round';
+        this.previewCtx.lineJoin = 'round';
+        this.previewCtx.beginPath();
+        this.previewCtx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            this.previewCtx.lineTo(points[i].x, points[i].y);
         }
+        this.previewCtx.stroke();
     }
 
-    handleMouseUp(e) {
-        if (!this.isDrawing) return;
-        this.isDrawing = false;
-
-        if (this.rawPoints.length > 2) {
-            this.processAndCreatePath();
-        }
-    }
-
-    drawPreview() {
-        // Clear preview canvas and redraw
-        this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
-
-        if (this.rawPoints.length > 1) {
-            this.previewCtx.strokeStyle = '#888'; // Light grey
-            this.previewCtx.lineWidth = 3;
-            this.previewCtx.lineCap = 'round';
-            this.previewCtx.lineJoin = 'round';
-            this.previewCtx.beginPath();
-            this.previewCtx.moveTo(this.rawPoints[0].x, this.rawPoints[0].y);
-
-            for (let i = 1; i < this.rawPoints.length; i++) {
-                this.previewCtx.lineTo(this.rawPoints[i].x, this.rawPoints[i].y);
-            }
-            this.previewCtx.stroke();
-        }
-
-        // Always show start/end points on preview canvas
-        this.drawStartEndPoints();
-    }
-
-    drawStartEndPoints() {
-        // Draw start point (green)
-        this.previewCtx.fillStyle = '#2ecc71';
+    drawMarkers() {
+        this.previewCtx.fillStyle = CONFIG.colors.start;
         this.previewCtx.beginPath();
         this.previewCtx.arc(this.startPoint.x, this.startPoint.y, 8, 0, Math.PI * 2);
         this.previewCtx.fill();
 
-        // Draw end point (red)
-        this.previewCtx.fillStyle = '#e74c3c';
+        this.previewCtx.fillStyle = CONFIG.colors.finish;
         this.previewCtx.beginPath();
         this.previewCtx.arc(this.endPoint.x, this.endPoint.y, 8, 0, Math.PI * 2);
         this.previewCtx.fill();
 
-        // Draw finish area indicator
         this.previewCtx.fillStyle = 'rgba(231, 76, 60, 0.2)';
         this.previewCtx.fillRect(
             this.endPoint.x,
@@ -580,283 +780,66 @@ class PathDrawer {
         );
     }
 
-    setupCollisionDetection() {
-        // Listen for collision events to detect when ball reaches finish area
-        Events.on(engine, 'afterUpdate', () => {
-            if (this.ball && this.ballDropped) {
-                const ballPosition = this.ball.position;
-                
-                // Check if ball is in finish area (right and bottom of end point)
-                if (ballPosition.x >= this.endPoint.x && ballPosition.y >= this.endPoint.y) {
-                    this.finishRace();
-                }
-            }
-        });
-    }
-
-    finishRace() {
-        if (this.ballDropped) {
-            this.ballDropped = false;
-            const finalTime = stopTimer();
-            
-            // Only show modal if not in demo mode
-            if (!this.isDemoMode) {
-                setTimeout(() => {
-                    $('#modal-record-text').text(`기록: ${finalTime.toFixed(2)}초`);
-                    $('#nickname-input').val(''); // Clear input field
-                    $('#nickname-modal').modal('show');
-                    finishSimulation();
-                }, 100);
-            } else {
-                // Reset demo mode
-                this.isDemoMode = false;
-            }
-        }
-    }
-
-    dropBall() {
-        // Remove existing ball if any
-        if (this.ball) {
-            Matter.World.remove(this.world, this.ball);
-        }
-
-        // Create new ball with offset from start point
-        const ballRadius = 15;
-        const offsetX = 20; // Right offset
-        const offsetY = -50; // Top offset
-        
-        this.ball = Matter.Bodies.circle(
-            this.startPoint.x + offsetX,
-            this.startPoint.y + offsetY,
-            ballRadius,
-            {
-                restitution: 0.7,
-                friction: 0.001,
-                frictionAir: 0.01,
-                render: {
-                    fillStyle: '#e74c3c',
-                    strokeStyle: '#c0392b',
-                    lineWidth: 2
-                }
-            }
-        );
-
-        Matter.World.add(this.world, this.ball);
-        this.ballDropped = true;
-        
-        // Start the timer
-        resetTimer();
-        startTimer();
-    }
-
-    processAndCreatePath() {
-        // Step 1: Smooth the raw points
-        const smoothedPoints = this.smoothPath(this.rawPoints);
-
-        // Step 2: Resize to fit between start and end points
-        const normalizedPoints = this.normalizePathToEndpoints(smoothedPoints);
-
-        // Step 3: Create Matter.js bodies from the path
-        this.createPhysicsPath(normalizedPoints);
-
-        // Step 4: Draw the final path
-        this.drawFinalPath(normalizedPoints);
-
-        // Step 5: Drop the ball
-        this.dropBall();
-    }
-
-    smoothPath(points) {
-        if (points.length < 3) return points;
-
-        const smoothed = [];
-        smoothed.push(points[0]); // Keep first point
-
-        // Apply simple moving average smoothing
-        for (let i = 1; i < points.length - 1; i++) {
-            const prev = points[i - 1];
-            const curr = points[i];
-            const next = points[i + 1];
-
-            const smoothedPoint = {
-                x: (prev.x + curr.x + next.x) / 3,
-                y: (prev.y + curr.y + next.y) / 3
-            };
-            smoothed.push(smoothedPoint);
-        }
-
-        smoothed.push(points[points.length - 1]); // Keep last point
-
-        // Create bezier curve points for even smoother result
-        return this.createBezierPoints(smoothed);
-    }
-
-    createBezierPoints(points) {
-        if (points.length < 2) return points;
-
-        const bezierPoints = [];
-        const segments = 10; // Points per segment
-
-        for (let i = 0; i < points.length - 1; i++) {
-            const p0 = points[Math.max(0, i - 1)];
-            const p1 = points[i];
-            const p2 = points[i + 1];
-            const p3 = points[Math.min(points.length - 1, i + 2)];
-
-            for (let t = 0; t < segments; t++) {
-                const u = t / segments;
-                const point = this.catmullRomSpline(p0, p1, p2, p3, u);
-                bezierPoints.push(point);
-            }
-        }
-
-        return bezierPoints;
-    }
-
-    catmullRomSpline(p0, p1, p2, p3, t) {
-        const t2 = t * t;
-        const t3 = t2 * t;
-
-        return {
-            x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t +
-                (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
-                (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
-            y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t +
-                (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-                (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3)
-        };
-    }
-
-    normalizePathToEndpoints(points) {
-        if (points.length === 0) return points;
-
-        // Find the range of the drawn path
-        const minX = Math.min(...points.map(p => p.x));
-        const maxX = Math.max(...points.map(p => p.x));
-        const minY = Math.min(...points.map(p => p.y));
-        const maxY = Math.max(...points.map(p => p.y));
-
-        // Calculate scaling factors
-        const scaleX = (this.endPoint.x - this.startPoint.x) / (maxX - minX);
-        const scaleY = (this.endPoint.y - this.startPoint.y) / (maxY - minY);
-
-        // Use the smaller scale to maintain aspect ratio
-        const scale = Math.min(Math.abs(scaleX), Math.abs(scaleY));
-
-        // Transform points to fit between start and end
-        return points.map(point => ({
-            x: this.startPoint.x + (point.x - minX) * scaleX,
-            y: this.startPoint.y + (point.y - minY) * scaleY
-        }));
-    }
-
-    createPhysicsPath(points) {
-        if (points.length < 2) return;
-
-        const bodies = [];
-        const segmentThickness = 10;
-
-        // Create physics bodies for each segment
-        for (let i = 0; i < points.length - 1; i++) {
-            const p1 = points[i];
-            const p2 = points[i + 1];
-
-            const length = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
-            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-
-            const centerX = (p1.x + p2.x) / 2;
-            const centerY = (p1.y + p2.y) / 2;
-
-            const segment = Matter.Bodies.rectangle(centerX, centerY, length, segmentThickness, {
-                angle: angle,
-                isStatic: true,
-                friction: 0.3,
-                render: {
-                    fillStyle: '#1abc9c',
-                    strokeStyle: '#1abc9c',
-                    lineWidth: 2
-                }
-            });
-
-            bodies.push(segment);
-        }
-
-        // Create a composite and add to world
-        this.currentPath = Matter.Body.create({
-            parts: bodies,
-            isStatic: true
-        });
-
-        Matter.World.add(this.world, this.currentPath);
-    }
-
-    drawFinalPath(points) {
-        // Clear preview canvas after final path is created
-        this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
-        this.drawStartEndPoints();
-    }
-
-    drawEndpoints() {
-        // This method is no longer needed as we use drawStartEndPoints
-    }
-
-    clearPath() {
-        if (this.currentPath) {
-            Matter.World.remove(this.world, this.currentPath);
-            this.currentPath = null;
-        }
-        
-        if (this.ball) {
-            Matter.World.remove(this.world, this.ball);
-            this.ball = null;
-        }
-        
-        this.ballDropped = false;
-        this.isDemoMode = false; // Reset demo mode
-        resetTimer();
-        
-        this.previewCtx.clearRect(0, 0, this.previewCanvas.width, this.previewCanvas.height);
-        this.drawStartEndPoints();
+    drawMessage(message) {
+        this.previewCtx.save();
+        this.previewCtx.font = 'bold 22px sans-serif';
+        this.previewCtx.textBaseline = 'top';
+        const width = this.previewCtx.measureText(message).width + 32;
+        this.previewCtx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        this.previewCtx.fillRect(24, 24, width, 52);
+        this.previewCtx.fillStyle = CONFIG.colors.invalid;
+        this.previewCtx.fillText(message, 40, 38);
+        this.previewCtx.restore();
     }
 }
 
+document.getElementById('redo-button').onclick = () => {
+    nicknameModal.hide();
+    pathDrawer.resetRun();
+};
 
-///
-// 엔진 실행 설정
+document.getElementById('best-button').onclick = () => {
+    nicknameModal.hide();
+    pathDrawer.showBestPath();
+};
+
+document.getElementById('clear-button').onclick = () => {
+    if (confirm('정말로 모든 기록을 지우시겠습니까?')) {
+        localStorage.removeItem('leaderboard');
+        updateLeaderboard();
+    }
+};
+
+document.getElementById('saveButton').onclick = saveHandler;
+document.getElementById('nickname-form').addEventListener('submit', event => {
+    event.preventDefault();
+    saveHandler();
+});
+nicknameModalElement.addEventListener('shown.bs.modal', () => {
+    document.getElementById('nickname-input').focus();
+});
+nicknameModalElement.addEventListener('hide.bs.modal', () => {
+    if (pathDrawer?.state === 'finished' && pendingRecordTime > 0) {
+        pendingRecordTime = 0;
+        pathDrawer.resetRun();
+    }
+});
+
 window.addEventListener('load', () => {
-    updateLeaderboard(); // Load leaderboard on startup
+    updateLeaderboard();
     const runner = Runner.create();
     Runner.run(runner, engine);
     Render.run(render);
-
-    const startPoint = { x: 50, y: 100 };
-    const endPoint = { x: canvas.width - 80, y: canvas.height - 80 };
-    window.pathDrawer = new PathDrawer(canvas, world, startPoint, endPoint);
-    
-    // Add resize listener
+    pathDrawer = new PathDrawer(canvas, world);
+    window.pathDrawer = pathDrawer;
     window.addEventListener('resize', handleResize);
 });
 
-// Global resize handler
 function handleResize() {
-    const container = document.getElementById('canvas-container');
-    const containerRect = container.getBoundingClientRect();
-    
-    // Update main canvas
-    canvas.width = containerRect.width;
-    canvas.height = containerRect.height;
-    canvas.style.width = containerRect.width + 'px';
-    canvas.style.height = containerRect.height + 'px';
-    
-    // Update Matter.js render options
-    render.options.width = canvas.width;
-    render.options.height = canvas.height;
-    render.canvas.width = canvas.width;
-    render.canvas.height = canvas.height;
-    
-    // Update preview canvas if pathDrawer exists
-    if (window.pathDrawer) {
-        window.pathDrawer.updatePreviewCanvasSize();
-        window.pathDrawer.drawStartEndPoints();
+    resizeCanvasToContainer();
+    if (pathDrawer) {
+        nicknameModal.hide();
+        pathDrawer.resetRun();
+        pathDrawer.updateGeometry();
     }
 }
