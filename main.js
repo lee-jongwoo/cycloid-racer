@@ -17,12 +17,15 @@ const CONFIG = {
         friction: 0.02,
         frictionAir: 0.003
     },
+    race: {
+        maxSeconds: 15
+    },
     path: {
         inputMinDistance: 4,
         simplifyDistance: 8,
-        resampleSpacing: 18,
-        segmentThickness: 12,
-        segmentOverlap: 4,
+        resampleSpacing: 16,
+        segmentThickness: 14,
+        segmentOverlap: 8,
         smoothingPasses: 2,
         finishMargin: 90,
         minVerticalRange: 90,
@@ -308,6 +311,11 @@ function processUserPath(rawPoints, startPoint, endPoint) {
     return { valid: true, reason: '', points: resampled };
 }
 
+function prepareRacePath(points) {
+    if (points.length < 2) return points;
+    return resamplePath(points, CONFIG.path.resampleSpacing);
+}
+
 function timeSince(date) {
     const seconds = Math.floor((new Date() - date) / 1000);
     let interval = seconds / 31536000;
@@ -437,26 +445,38 @@ function saveHandler() {
 function generateCycloidPath(startPoint, endPoint) {
     const dx = endPoint.x - startPoint.x;
     const dy = endPoint.y - startPoint.y;
+    if (dx <= 0 || dy <= 0) return [startPoint, endPoint];
+
+    const endpointRatio = dy / dx;
+    const ratioForTheta = theta => (1 - Math.cos(theta)) / (theta - Math.sin(theta));
+    let low = 0.000001;
+    let high = Math.PI * 2 - 0.000001;
+
+    for (let i = 0; i < 80; i++) {
+        const mid = (low + high) / 2;
+        if (ratioForTheta(mid) > endpointRatio) {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+
+    const thetaMax = (low + high) / 2;
+    const radius = dx / (thetaMax - Math.sin(thetaMax));
     const points = [];
-    const steps = 90;
-    const tMax = Math.PI + Math.atan(Math.abs(dy / Math.max(1, dx)));
-    const radius = Math.abs(dx) / Math.max(1, tMax - Math.sin(tMax));
+    const steps = 180;
 
     for (let i = 0; i <= steps; i++) {
-        const t = (i / steps) * tMax;
+        const t = (i / steps) * thetaMax;
         points.push({
             x: startPoint.x + radius * (t - Math.sin(t)),
             y: startPoint.y + radius * (1 - Math.cos(t))
         });
     }
 
-    const last = points[points.length - 1];
-    const scaleX = dx / Math.max(1, last.x - startPoint.x);
-    const scaleY = dy / Math.max(1, last.y - startPoint.y);
-    return points.map(point => ({
-        x: startPoint.x + (point.x - startPoint.x) * scaleX,
-        y: startPoint.y + (point.y - startPoint.y) * scaleY
-    }));
+    points[0] = { ...startPoint };
+    points[points.length - 1] = { ...endPoint };
+    return points;
 }
 
 class PathDrawer {
@@ -544,6 +564,9 @@ class PathDrawer {
             if (this.isInFinishArea(position)) {
                 this.finishRace();
             }
+            if (currentTime >= CONFIG.race.maxSeconds) {
+                this.failRace();
+            }
             if (position.y > this.canvas.height + 800 || position.x > this.canvas.width + 800) {
                 this.failRace();
             }
@@ -601,13 +624,14 @@ class PathDrawer {
     startRace(points, demoMode) {
         this.clearPhysics();
         this.demoMode = demoMode;
-        this.rawPoints = points.map(point => ({ ...point }));
+        const racePoints = prepareRacePath(points);
+        this.rawPoints = racePoints.map(point => ({ ...point }));
         lastCompletedPath = [];
-        if (!this.createPhysicsPath(points)) {
+        if (!this.createPhysicsPath(racePoints)) {
             this.resetRun('경로를 다시 그려 주세요');
             return;
         }
-        this.drawOverlay(points, CONFIG.colors.path);
+        this.drawOverlay(racePoints, CONFIG.colors.path);
         this.dropBall();
         this.state = demoMode ? 'demo' : 'running';
     }
